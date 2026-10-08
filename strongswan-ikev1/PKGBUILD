@@ -1,0 +1,46 @@
+# Maintainer: rodrigo.dev.ux@outlook.com
+# PKGBUILD customizado: strongSwan compilado com --enable-ikev1.
+# O pacote oficial do repo extra vem sem suporte a IKEv1 (upstream vem
+# descontinuando o protocolo), mas L2TP/IPsec PSK clássico (o padrão
+# usuário/senha + PSK do Windows) é inteiramente IKEv1 — sem isso o charon
+# recusa com "IKE version 1 not supported".
+#
+# `provides=('ipsec')` substitui o libreswan (que tem um bug aberto no XFRM
+# que quebra esse mesmo cenário — libreswan/libreswan#1343).
+pkgname=strongswan
+pkgver=6.1.0
+pkgrel=1
+pkgdesc="strongSwan com --enable-ikev1 (necessário pra L2TP/IPsec PSK legado)"
+arch=('x86_64')
+url="https://www.strongswan.org"
+license=('GPL-2.0-only')
+depends=('curl' 'gmp' 'iproute2' 'openssl' 'sqlite' 'libcap' 'systemd-libs' 'pam')
+provides=('ipsec')
+conflicts=('libreswan')
+source=("https://download.strongswan.org/strongswan-${pkgver}.tar.bz2")
+sha256sums=('fe6c97481298767213cfc2e9a1da29fdd8018d481ff4cb9cf0283099654f20d4')
+
+build() {
+  cd "strongswan-$pkgver"
+  ./configure \
+    --prefix=/usr --sysconfdir=/etc \
+    --sbindir=/usr/bin \
+    --with-ipsecdir=/usr/lib/ipsec \
+    --with-systemdsystemunitdir=/usr/lib/systemd/system \
+    --enable-ikev1 --enable-systemd --enable-stroke \
+    --enable-eap-mschapv2 --enable-gmp --enable-curl --enable-sqlite
+  make
+}
+
+package() {
+  cd "strongswan-$pkgver"
+  make DESTDIR="$pkgdir" install
+
+  # Vários pedaços do build hardcodam o default do autotools
+  # (${libexecdir}/ipsec = /usr/libexec/ipsec) mesmo com --with-ipsecdir
+  # setado: o script `ipsec` respeita a flag, mas o binário `starter`
+  # compilado não. Em vez de caçar cada lugar que faz isso, symlink de
+  # compatibilidade cobre todos de uma vez.
+  install -d "$pkgdir/usr/libexec"
+  ln -sfn /usr/lib/ipsec "$pkgdir/usr/libexec/ipsec"
+}
